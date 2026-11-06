@@ -1,5 +1,5 @@
 /* Service worker: deja la aplicación funcionando sin cobertura. */
-const CACHE = 'diario-v1';
+const CACHE = 'diario-v2';
 const FICHEROS = [
   './',
   './index.html',

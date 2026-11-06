@@ -1,8 +1,8 @@
 # Diario de trabajos
 
 Aplicación web para el móvil (PWA) para apuntar, al final de cada día, el trabajo
-hecho: cliente, referencia, desplazamientos, horas de oficial, horas de ayudante
-y materiales. A fin de mes genera en PDF el listado para facturar.
+hecho: cliente, trabajo, desplazamientos, horas de oficial, horas de ayudante
+(sueltas o los dos juntos) y materiales. A fin de mes genera en PDF el listado para facturar.
 
 Pensada para no olvidarse de facturar nada: si no se apunta, se pierde.
 
@@ -17,15 +17,16 @@ Pensada para no olvidarse de facturar nada: si no se apunta, se pierde.
 
 ## Qué hace
 
-- Alta en tres pasos: cliente → referencia → el apunte del día.
-- Las tarifas (hora de oficial, hora de ayudante, desplazamiento) se configuran
+- Alta en tres pasos: cliente → trabajo → el apunte del día.
+- Las tarifas (hora de oficial, hora de ayudante, hora de los dos juntos y
+  desplazamiento) se configuran
   una vez, y **cada apunte guarda la tarifa que había al crearlo**: subir precios
   no recalcula el trabajo antiguo.
 - Catálogo de materiales que recuerda el último precio de cada uno.
 - Avisa en rojo de los materiales sin precio, para no facturarlos a cero.
-- Tres informes en PDF: del mes, de una referencia concreta (para trabajos que
-  duran varios meses), y de todo lo pendiente de facturar.
-- Copia de seguridad a fichero, y restauración.
+- Tres informes en PDF: del mes, de un trabajo concreto (para los que duran
+  varios meses), y de todo lo pendiente de facturar.
+- Copia de seguridad por el menú de compartir del móvil, y restauración.
 
 ## Instalación y uso
 

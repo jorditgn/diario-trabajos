@@ -1,10 +1,24 @@
 DIARIO DE TRABAJOS
 ==================
-Aplicación para el móvil. Apuntas cada día lo que has hecho (cliente,
-referencia, desplazamientos, horas y materiales) y a fin de mes sacas el
-listado en PDF para facturar.
+Aplicación para el móvil. Apuntas cada día lo que has hecho (cliente, trabajo,
+desplazamientos, horas y materiales) y a fin de mes sacas el listado en PDF
+para facturar.
 
 Los datos se guardan SÓLO en el móvil. No hay servidor ni cuenta ni internet.
+
+
+CÓMO SE ORGANIZA
+----------------
+  CLIENTE  (Alex)
+     └── TRABAJO  (Su casa)              abierto / facturado
+            ├── APUNTE del 2 de nov      un apunte = un día
+            │     1 desplazamiento, 2 h de oficial,
+            │     5 juegos de guías Blum, 1 panel de madera
+            └── APUNTE del 9 de nov
+                  ...
+
+Cliente y trabajo son obligatorios. Todo lo demás es opcional: puedes apuntar
+sólo materiales, sólo horas, o lo que haga falta.
 
 
 QUÉ HAY EN ESTA CARPETA
@@ -16,89 +30,92 @@ QUÉ HAY EN ESTA CARPETA
   icon-512.png
   vendor/                 librería para generar los PDF
 
-Los 6 ficheros y la carpeta vendor van juntos. No cambies los nombres.
+Van todos juntos. No cambies los nombres.
 
 
-CÓMO PONERLA EN INTERNET (5 minutos, gratis)
---------------------------------------------
-Hace falta un hosting con HTTPS: sin él, Android no deja instalarla
-ni guardar los datos de forma fiable.
+CÓMO PONERLA EN INTERNET
+------------------------
+Ya está publicada en:
 
-Opción recomendada: Cloudflare Pages
-  1. Entra en  https://pages.cloudflare.com  y crea una cuenta gratis.
-  2. "Create a project"  >  "Upload assets" (subir ficheros directamente).
-  3. Ponle un nombre, por ejemplo  diario-trabajos
-  4. Arrastra el CONTENIDO de esta carpeta (los ficheros sueltos y la
-     carpeta vendor), no la carpeta de fuera.
-  5. "Deploy". Te da una dirección tipo
-        https://diario-trabajos.pages.dev
+    https://jorditgn.github.io/diario-trabajos/
 
-Netlify Drop es igual de fácil:  https://app.netlify.com/drop
+Sale de este mismo repositorio de GitHub, con GitHub Pages. Para cambiar algo
+se suben los ficheros nuevos y en un minuto está publicado; los móviles se
+actualizan solos la próxima vez que abran la app.
+
+Si algún día quieres moverla a otro sitio, vale cualquier hosting con HTTPS:
+Cloudflare Pages o Netlify Drop, arrastrando la carpeta.
 
 
 CÓMO INSTALARLA EN EL MÓVIL
 ---------------------------
   1. Abre esa dirección en Chrome, en el Android.
-  2. Menú de los tres puntos  >  "Añadir a pantalla de inicio"
+  2. Menú de los tres puntos > "Añadir a pantalla de inicio"
      (o "Instalar aplicación").
-  3. Ya tienes el icono. Se abre a pantalla completa, como una app
-     normal, y funciona sin cobertura.
+  3. Ábrela SIEMPRE desde el icono, no desde el navegador: así va a pantalla
+     completa y funciona sin cobertura.
 
 
 LO PRIMERO QUE HAY QUE HACER
 ----------------------------
-  Ajustes  >  Tarifas actuales
-      precio de la hora de oficial, de la hora de ayudante y del
-      desplazamiento. Lo que dejes vacío, no suma importe.
+  Ajustes > Tarifas actuales
+      hora de oficial
+      hora de ayudante
+      hora de oficial + ayudante   (cuando vais los dos a la vez)
+      desplazamiento
+  Lo que dejes vacío no suma importe.
 
-  Ajustes  >  Datos para la cabecera de los informes
+  Ajustes > Datos para la cabecera de los informes
       tu nombre y teléfono, para que salgan arriba en los PDF.
 
-IMPORTANTE SOBRE LAS TARIFAS: cada apunte guarda la tarifa que había
-cuando lo creaste. Si el año que viene subes el precio de la hora, los
-apuntes viejos siguen valiendo lo que valían. Puedes cambiar la tarifa de
-un apunte concreto abriéndolo, en "Tarifas de este apunte".
+IMPORTANTE SOBRE LAS TARIFAS: cada apunte guarda la tarifa que había cuando lo
+creaste. Si el año que viene subes el precio de la hora, los apuntes viejos
+siguen valiendo lo que valían. Puedes cambiar la tarifa de un apunte concreto
+abriéndolo, en "Tarifas de este apunte".
 
 
 EL DÍA A DÍA
 ------------
-  Apuntar trabajo  >  cliente  >  referencia  >  los datos del día.
+  Apuntar trabajo  >  cliente  >  trabajo  >  los datos del día.
 
-  Cliente y referencia se eligen de una lista; sólo escribes cuando es
-  algo nuevo. Los materiales recuerdan el último precio que les pusiste.
+  Cliente y trabajo se eligen de una lista; sólo escribes cuando es algo nuevo.
+  Los materiales recuerdan el último precio que les pusiste.
 
-  Si no sabes el precio de un material, déjalo vacío: la app te avisará
-  en rojo para que no lo factures a cero.
+  Si no sabes el precio de un material, déjalo vacío: la app te avisa en rojo
+  para que no lo factures a cero.
 
 
 LOS INFORMES
 ------------
-  Del mes          : para facturar a fin de mes. Primero el resumen por
-                     referencia, después el detalle día a día.
-  De una referencia: todos los meses de un trabajo largo, para facturarlo
-                     cuando se acabe.
-  Pendiente        : todo lo que no has facturado todavía.
+  Del mes      : para facturar a fin de mes. Primero el resumen por trabajo,
+                 después el detalle día a día.
+  De un trabajo: todos los meses de un trabajo largo, para facturarlo cuando
+                 se acabe.
+  Pendiente    : todo lo que no has facturado todavía.
 
-  Cuando cobres una referencia, ábrela y pulsa "Marcar facturada".
-  Así desaparece de los pendientes.
+  Cuando cobres un trabajo, ábrelo y pulsa "Marcar facturado". Así desaparece
+  de los pendientes.
 
 
-COPIA DE SEGURIDAD  ← LO MÁS IMPORTANTE
----------------------------------------
-Los datos están sólo en este móvil. Si lo pierdes, se rompe, o borras los
-datos de Chrome, SE PIERDE TODO.
+COPIA DE SEGURIDAD  <-- LO MÁS IMPORTANTE
+-----------------------------------------
+Los datos están sólo en este móvil. Si lo pierdes, se rompe, o borras los datos
+de Chrome, SE PIERDE TODO.
 
   Ajustes  >  Copia de seguridad  >  "Enviar copia"
 
-Hazlo una vez al mes, cuando saques el informe. Guarda el fichero .json
-en Drive o mándatelo por correo. Para recuperarlo, en un móvil nuevo:
-instalas la app y pulsas "Restaurar copia".
+Se abre el menú de compartir de Android y eliges Drive, Gmail, WhatsApp o lo
+que quieras. Va directo, sin pasar por el gestor de ficheros.
+
+La copia es un fichero .txt (por dentro lleva los datos). Se llama .txt y no
+.json porque Chrome en Android sólo deja compartir ciertos tipos de fichero, y
+.json no es uno de ellos.
+
+Hazlo una vez al mes, cuando saques el informe. Para recuperarla en un móvil
+nuevo: instalas la app y pulsas "Restaurar".
 
 La app te avisa en la pantalla de inicio si llevas más de dos semanas sin
-hacer una.
+hacer ninguna.
 
-
-ACTUALIZAR LA APP
------------------
-Subes los ficheros nuevos al mismo sitio y listo: los móviles se
-actualizan solos la próxima vez que la abran. Los datos no se tocan.
+El botón "Descargar" hace lo mismo pero deja el fichero en la carpeta de
+descargas, por si lo quieres pasar al ordenador por cable.

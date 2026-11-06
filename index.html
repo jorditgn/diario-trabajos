@@ -268,7 +268,7 @@ function estadoNuevo(){
   return {
     v:1,
     ajustes:{ titular:'', nif:'', telefono:'', email:'',
-              tOficial:0, tAyudante:0, pDespl:0, tema:'auto' },
+              tOficial:0, tAyudante:0, tOfAy:0, pDespl:0, tema:'auto' },
     clientes:[], referencias:[], apuntes:[], catalogo:[],
     meta:{ ultimaCopia:null, creado:new Date().toISOString() }
   };
@@ -303,7 +303,11 @@ function migrar(d){
   d.ajustes=Object.assign(estadoNuevo().ajustes, d.ajustes||{});
   d.meta=Object.assign({ultimaCopia:null,creado:null}, d.meta||{});
   ['clientes','referencias','apuntes','catalogo'].forEach(k=>{ if(!Array.isArray(d[k])) d[k]=[]; });
-  d.apuntes.forEach(a=>{ if(!Array.isArray(a.materiales)) a.materiales=[]; });
+  d.apuntes.forEach(a=>{
+    if(!Array.isArray(a.materiales)) a.materiales=[];
+    if(typeof a.hOfAy!=='number') a.hOfAy=0;      /* horas de oficial + ayudante */
+    if(typeof a.tOfAy!=='number') a.tOfAy=0;      /* su tarifa, congelada en el apunte */
+  });
   return d;
 }
 async function cargar(){
@@ -400,23 +404,25 @@ function impMat(a){ return (a.materiales||[]).reduce((s,m)=> s + pn(m.c)*pn(m.p)
 function impApunte(a){
   return (a.hOficial||0)*(a.tOficial||0)
        + (a.hAyudante||0)*(a.tAyudante||0)
+       + (a.hOfAy||0)*(a.tOfAy||0)
        + (a.desplazamientos||0)*(a.pDespl||0)
        + impMat(a);
 }
 function faltaPrecio(a){ return (a.materiales||[]).some(m=> pn(m.c)>0 && pn(m.p)<=0 ); }
 function totales(aps){
-  const t={n:aps.length,hOf:0,hAy:0,despl:0,nMat:0,impOf:0,impAy:0,impDespl:0,impMat:0,total:0,ultima:'',falta:false};
+  const t={n:aps.length,hOf:0,hAy:0,hOfAy:0,despl:0,nMat:0,impOf:0,impAy:0,impOfAy:0,impDespl:0,impMat:0,total:0,ultima:'',falta:false};
   aps.forEach(a=>{
-    t.hOf+=a.hOficial||0; t.hAy+=a.hAyudante||0; t.despl+=a.desplazamientos||0;
+    t.hOf+=a.hOficial||0; t.hAy+=a.hAyudante||0; t.hOfAy+=a.hOfAy||0; t.despl+=a.desplazamientos||0;
     t.nMat+=(a.materiales||[]).length;
     t.impOf+=(a.hOficial||0)*(a.tOficial||0);
     t.impAy+=(a.hAyudante||0)*(a.tAyudante||0);
+    t.impOfAy+=(a.hOfAy||0)*(a.tOfAy||0);
     t.impDespl+=(a.desplazamientos||0)*(a.pDespl||0);
     t.impMat+=impMat(a);
     if(a.fecha>t.ultima) t.ultima=a.fecha;
     if(faltaPrecio(a)) t.falta=true;
   });
-  t.total=t.impOf+t.impAy+t.impDespl+t.impMat;
+  t.total=t.impOf+t.impAy+t.impOfAy+t.impDespl+t.impMat;
   return t;
 }
 function totalesRef(rid){ return totales(apsDe(rid)); }
@@ -445,6 +451,7 @@ function resumenChips(a){
   if(a.desplazamientos) out.push(nn(a.desplazamientos)+(a.desplazamientos===1?' despl.':' despl.'));
   if(a.hOficial) out.push(nn(a.hOficial)+' h of.');
   if(a.hAyudante) out.push(nn(a.hAyudante)+' h ay.');
+  if(a.hOfAy) out.push(nn(a.hOfAy)+' h of+ay');
   const nm=(a.materiales||[]).length;
   if(nm) out.push(nm+(nm===1?' material':' materiales'));
   if(!out.length) out.push('vacío');
@@ -456,7 +463,7 @@ function resumenChips(a){
    ========================================================= */
 const NAV=[
   {h:'#/',            k:'inicio',      t:'Inicio',      i:'casa'},
-  {h:'#/referencias', k:'referencias', t:'Referencias', i:'carpeta'},
+  {h:'#/referencias', k:'referencias', t:'Trabajos',    i:'carpeta'},
   {h:'#/informes',    k:'informes',    t:'Informes',    i:'hoja'},
   {h:'#/ajustes',     k:'ajustes',     t:'Ajustes',     i:'rueda'}
 ];
@@ -531,7 +538,7 @@ VISTAS['inicio']=function(){
 
   h+='<div class="card mt"><button class="li" data-act="ir" data-h="#/referencias">'+
      '<div class="gro"><div class="t">Pendiente de facturar</div><div class="s">'+
-     abiertas.length+(abiertas.length===1?' referencia abierta':' referencias abiertas')+
+     abiertas.length+(abiertas.length===1?' trabajo abierto':' trabajos abiertos')+
      (falta?' · <span style="color:var(--danger)">falta algún precio</span>':'')+
      '</div></div><div class="amt"><div class="v">'+eur(totAb)+'</div></div><div class="chev">'+I.chev+'</div></button></div>';
 
@@ -550,7 +557,7 @@ VISTAS['inicio']=function(){
     h+='</div>';
   }
   h+='</div>';
-  return {titulo:'Diario de trabajos', sub:D.apuntes.length+' apuntes · '+D.referencias.length+' referencias', html:h, nav:'inicio'};
+  return {titulo:'Diario de trabajos', sub:D.apuntes.length+' apuntes · '+D.referencias.length+' trabajos', html:h, nav:'inicio'};
 };
 ACT['nuevo-apunte']=()=>{ borrador=null; ir('#/nuevo/cliente'); };
 
@@ -572,11 +579,11 @@ function pasoCliente(){
   let h='<button class="btn primary block" data-act="form-cliente">'+I.mas+' Nuevo cliente</button>'+
         '<div id="zona-form" class="mt"></div>';
   if(conA.length){
-    h+='<div class="card"><div class="card-h">Con referencias abiertas</div><div class="lst">';
+    h+='<div class="card"><div class="card-h">Con trabajos abiertos</div><div class="lst">';
     conA.forEach(x=>{
       h+='<button class="li" data-act="ir" data-h="#/nuevo/ref/'+x.c.id+'">'+
          '<div class="gro"><div class="t">'+esc(x.c.nombre)+'</div><div class="s">'+
-         x.nAbiertas+(x.nAbiertas===1?' referencia abierta':' referencias abiertas')+
+         x.nAbiertas+(x.nAbiertas===1?' trabajo abierto':' trabajos abiertos')+
          (x.ultima?' · últ. '+fFechaC(x.ultima):'')+'</div></div><div class="chev">'+I.chev+'</div></button>';
     });
     h+='</div></div>';
@@ -585,7 +592,7 @@ function pasoCliente(){
     h+='<details class="card"><summary class="card-h" style="cursor:pointer">Otros clientes ('+otros.length+')</summary><div class="lst">';
     otros.forEach(c=>{
       h+='<button class="li" data-act="ir" data-h="#/nuevo/ref/'+c.id+'">'+
-         '<div class="gro"><div class="t">'+esc(c.nombre)+'</div><div class="s">sin referencias abiertas</div></div>'+
+         '<div class="gro"><div class="t">'+esc(c.nombre)+'</div><div class="s">sin trabajos abiertos</div></div>'+
          '<div class="chev">'+I.chev+'</div></button>';
     });
     h+='</div></details>';
@@ -619,10 +626,10 @@ function pasoRef(cid){
       .map(r=>({r:r,t:totalesRef(r.id)}))
       .sort((a,b)=> b.t.ultima.localeCompare(a.t.ultima) || a.r.nombre.localeCompare(b.r.nombre,'es'));
   const fact=refsDe(cid).filter(r=>r.estado==='facturada');
-  let h='<button class="btn primary block" data-act="form-ref" data-cli="'+cid+'">'+I.mas+' Nueva referencia</button>'+
+  let h='<button class="btn primary block" data-act="form-ref" data-cli="'+cid+'">'+I.mas+' Nuevo trabajo</button>'+
         '<div id="zona-form" class="mt"></div>';
   if(abiertas.length){
-    h+='<div class="card"><div class="card-h">Referencias abiertas de '+esc(c.nombre)+'</div><div class="lst">';
+    h+='<div class="card"><div class="card-h">Trabajos abiertos de '+esc(c.nombre)+'</div><div class="lst">';
     abiertas.forEach(x=>{
       h+='<button class="li" data-act="ir" data-h="#/nuevo/apunte/'+x.r.id+'">'+
          '<div class="gro"><div class="t">'+esc(x.r.nombre)+'</div><div class="s">'+
@@ -632,25 +639,25 @@ function pasoRef(cid){
     });
     h+='</div></div>';
   }else{
-    h+='<div class="empty">'+I.carpeta+'<p>'+esc(c.nombre)+' no tiene referencias abiertas.</p>'+
+    h+='<div class="empty">'+I.carpeta+'<p>'+esc(c.nombre)+' no tiene trabajos abiertos.</p>'+
        '<p class="small">Crea una nueva con el botón de arriba.</p></div>';
   }
   if(fact.length){
-    h+='<details class="card"><summary class="card-h" style="cursor:pointer">Referencias ya facturadas ('+fact.length+')</summary><div class="lst">';
+    h+='<details class="card"><summary class="card-h" style="cursor:pointer">Trabajos ya facturados ('+fact.length+')</summary><div class="lst">';
     fact.forEach(r=>{
       const t=totalesRef(r.id);
       h+='<button class="li" data-act="ir" data-h="#/nuevo/apunte/'+r.id+'">'+
-         '<div class="gro"><div class="t">'+esc(r.nombre)+' <span class="badge done">facturada</span></div>'+
+         '<div class="gro"><div class="t">'+esc(r.nombre)+' <span class="badge done">facturado</span></div>'+
          '<div class="s">'+t.n+(t.n===1?' apunte':' apuntes')+'</div></div><div class="chev">'+I.chev+'</div></button>';
     });
     h+='</div></details>';
   }
-  return {titulo:'Paso 2 de 3 · Referencia', sub:'Cliente: '+c.nombre, atras:true, html:h, nav:false};
+  return {titulo:'Paso 2 de 3 · Trabajo', sub:'Cliente: '+c.nombre, atras:true, html:h, nav:false};
 }
 ACT['form-ref']=el=>{
   const cid=el.dataset.cli;
   const z=document.getElementById('zona-form');
-  z.innerHTML='<div class="card pad"><div class="field"><label for="nr">Referencia del trabajo</label>'+
+  z.innerHTML='<div class="card pad"><div class="field"><label for="nr">Nombre del trabajo</label>'+
     '<input class="inp" id="nr" placeholder="Por ejemplo: Su casa" autocomplete="off" autocapitalize="sentences">'+
     '<div class="hint">Un nombre que reconozcas: la obra, la vivienda, el encargo.</div></div>'+
     '<div class="btnrow"><button class="btn" data-act="cerrar-form">Cancelar</button>'+
@@ -660,7 +667,7 @@ ACT['form-ref']=el=>{
 ACT['crear-ref']=async el=>{
   const cid=el.dataset.cli;
   const i=document.getElementById('nr'); const n=(i.value||'').trim();
-  if(!n){ toast('Escribe la referencia'); i.focus(); return; }
+  if(!n){ toast('Escribe el nombre del trabajo'); i.focus(); return; }
   const r={id:uid(), clienteId:cid, nombre:n, estado:'abierta', fechaFactura:null, creado:new Date().toISOString()};
   D.referencias.push(r); await guardar();
   ir('#/nuevo/apunte/'+r.id);
@@ -670,8 +677,9 @@ function pasoApunte(rid){
   const r=getRef(rid); if(!r){ ir('#/nuevo/cliente'); return null; }
   if(!borrador || borrador.id || borrador.referenciaId!==rid){
     borrador={ id:null, referenciaId:rid, fecha:hoyISO(),
-               desplazamientos:0, hOficial:0, hAyudante:0, materiales:[], notas:'',
-               tOficial:pn(D.ajustes.tOficial), tAyudante:pn(D.ajustes.tAyudante), pDespl:pn(D.ajustes.pDespl) };
+               desplazamientos:0, hOficial:0, hAyudante:0, hOfAy:0, materiales:[], notas:'',
+               tOficial:pn(D.ajustes.tOficial), tAyudante:pn(D.ajustes.tAyudante),
+               tOfAy:pn(D.ajustes.tOfAy), pDespl:pn(D.ajustes.pDespl) };
   }
   return formApunte(r,false);
 }
@@ -717,7 +725,7 @@ function formApunte(r, editando){
   const b=borrador;
   let h='';
   if(r.estado==='facturada'){
-    h+='<div class="note w">'+I.aviso+'<div>Esta referencia está marcada como <b>facturada</b>. Si le añades trabajo, acuérdate de volver a facturarlo.</div></div>';
+    h+='<div class="note w">'+I.aviso+'<div>Este trabajo está marcado como <b>facturado</b>. Si le añades algo, acuérdate de volver a facturarlo.</div></div>';
   }
   h+='<div class="card pad"><div class="field" style="margin-bottom:10px"><label for="f-fecha">Fecha</label>'+
      '<input class="inp" type="date" id="f-fecha" value="'+b.fecha+'" data-ch="fecha" max="'+hoyISO()+'">'+
@@ -729,6 +737,7 @@ function formApunte(r, editando){
   h+=cnt('Desplazamientos', b.pDespl? nn(b.pDespl)+' € cada uno' : 'sin precio', 'despl', b.desplazamientos, 1, 0);
   h+=cnt('Horas de oficial',  b.tOficial? nn(b.tOficial)+' € la hora' : 'sin tarifa', 'hof', b.hOficial, 0.5, 1);
   h+=cnt('Horas de ayudante', b.tAyudante? nn(b.tAyudante)+' € la hora' : 'sin tarifa', 'hay', b.hAyudante, 0.5, 1);
+  h+=cnt('Horas de oficial + ayudante', b.tOfAy? nn(b.tOfAy)+' € la hora' : 'sin tarifa', 'hofay', b.hOfAy, 0.5, 1);
   h+='</div>';
 
   h+='<div class="card"><div class="card-h">Materiales</div>';
@@ -745,6 +754,7 @@ function formApunte(r, editando){
      'Si luego cambias las tarifas en Ajustes, <b>este apunte no cambia</b>.</div></div>'+
      campoNum('Hora de oficial (€/h)','tOficial',b.tOficial)+
      campoNum('Hora de ayudante (€/h)','tAyudante',b.tAyudante)+
+     campoNum('Hora de oficial + ayudante (€/h)','tOfAy',b.tOfAy)+
      campoNum('Desplazamiento (€ cada uno)','pDespl',b.pDespl)+
      '</div></details>';
 
@@ -769,7 +779,7 @@ function refrescaFila(i){
   const imp=pn(m.c)*pn(m.p);
   cel.innerHTML = imp?eur(imp):'<span class="muted">—</span>';
 }
-const CLAVE={despl:'desplazamientos', hof:'hOficial', hay:'hAyudante'};
+const CLAVE={despl:'desplazamientos', hof:'hOficial', hay:'hAyudante', hofay:'hOfAy'};
 
 function refrescaFecha(){
   const t=document.getElementById('f-fecha-txt');
@@ -825,7 +835,7 @@ ACT['guardar-apunte']=async()=>{
   const sinDesc=b.materiales.find(m=>m.d==='');
   if(sinDesc){ toast('Falta la descripción de un material'); return; }
   if(!b.fecha){ toast('Falta la fecha'); return; }
-  if(!b.desplazamientos && !b.hOficial && !b.hAyudante && !b.materiales.length){
+  if(!b.desplazamientos && !b.hOficial && !b.hAyudante && !b.hOfAy && !b.materiales.length){
     toast('El apunte está vacío'); return;
   }
   tocarCatalogo(b.materiales);
@@ -864,7 +874,7 @@ VISTAS['referencias']=function(p){
 
   let h='<div class="tabs" role="tablist">'+
     '<button role="tab" aria-selected="'+(f==='abiertas')+'" data-act="ir" data-h="#/referencias">Sin facturar</button>'+
-    '<button role="tab" aria-selected="'+(f==='facturadas')+'" data-act="ir" data-h="#/referencias/facturadas">Facturadas</button>'+
+    '<button role="tab" aria-selected="'+(f==='facturadas')+'" data-act="ir" data-h="#/referencias/facturadas">Facturados</button>'+
     '<button role="tab" aria-selected="'+(f==='todas')+'" data-act="ir" data-h="#/referencias/todas">Todas</button></div>';
 
   if(!datos.length){
@@ -877,7 +887,7 @@ VISTAS['referencias']=function(p){
       .forEach(x=>{
         const r=x.r, t=x.t;
         h+='<button class="li" data-act="ir" data-h="#/ref/'+r.id+'">'+
-           '<div class="gro"><div class="t">'+esc(r.nombre)+(r.estado==='facturada'?' <span class="badge done">facturada</span>':'')+'</div>'+
+           '<div class="gro"><div class="t">'+esc(r.nombre)+(r.estado==='facturada'?' <span class="badge done">facturado</span>':'')+'</div>'+
            '<div class="s">'+t.n+(t.n===1?' apunte':' apuntes')+(t.ultima?' · últ. '+fFechaC(t.ultima):'')+
            (t.falta?' · <span style="color:var(--danger)">falta precio</span>':'')+'</div></div>'+
            '<div class="amt"><div class="v">'+eur(t.total)+'</div></div><div class="chev">'+I.chev+'</div></button>';
@@ -887,7 +897,7 @@ VISTAS['referencias']=function(p){
     h+='</div>';
     h+='<div class="card"><div class="totbig"><div>Total'+(f==='abiertas'?' sin facturar':'')+'</div><div class="v">'+eur(total)+'</div></div></div>';
   }
-  return {titulo:'Referencias', sub:datos.length+(datos.length===1?' referencia':' referencias'), html:h, nav:'referencias'};
+  return {titulo:'Trabajos', sub:datos.length+(datos.length===1?' trabajo':' trabajos'), html:h, nav:'referencias'};
 };
 
 function celda(k,v,imp){
@@ -901,24 +911,26 @@ VISTAS['ref']=function(p){
   if(t.falta){
     h+='<div class="note d">'+I.aviso+'<div>Hay materiales <b>sin precio</b>. Ponles precio antes de facturar o saldrán a cero.</div></div>';
   }
-  h+='<div class="card"><div class="tot">'+
-     celda('Horas oficial', nn(t.hOf)+' h', t.impOf)+
-     celda('Horas ayudante', nn(t.hAy)+' h', t.impAy)+
-     celda('Desplazamientos', nn(t.despl), t.impDespl)+
-     celda('Materiales', t.nMat+(t.nMat===1?' línea':' líneas'), t.impMat)+
+  const celdas=[celda('Horas oficial', nn(t.hOf)+' h', t.impOf),
+                celda('Horas ayudante', nn(t.hAy)+' h', t.impAy)];
+  if(t.hOfAy) celdas.push(celda('Horas of. + ay.', nn(t.hOfAy)+' h', t.impOfAy));
+  celdas.push(celda('Desplazamientos', nn(t.despl), t.impDespl));
+  celdas.push(celda('Materiales', t.nMat+(t.nMat===1?' línea':' líneas'), t.impMat));
+  if(celdas.length%2) celdas.push('<div></div>');
+  h+='<div class="card"><div class="tot">'+celdas.join('')+
      '</div><div class="totbig"><div>'+(r.estado==='facturada'?'Total facturado':'Total a facturar')+'</div>'+
      '<div class="v">'+eur(t.total)+'</div></div></div>';
 
   h+='<div class="btnrow mb">'+
-     '<button class="btn primary" data-act="pdf-ref" data-id="'+r.id+'">'+I.pdf+' PDF de esta referencia</button></div>';
+     '<button class="btn primary" data-act="pdf-ref" data-id="'+r.id+'">'+I.pdf+' PDF de este trabajo</button></div>';
   h+='<div class="btnrow mb">'+
      '<button class="btn'+(r.estado==='facturada'?'':' ok')+'" data-act="toggle-fact" data-id="'+r.id+'">'+
-       (r.estado==='facturada'?'Reabrir': I.ok+' Marcar facturada')+'</button>'+
+       (r.estado==='facturada'?'Reabrir': I.ok+' Marcar facturado')+'</button>'+
      '<button class="btn" data-act="renom-ref" data-id="'+r.id+'">'+I.lapiz+' Renombrar</button></div>';
 
   h+='<div class="card"><div class="card-h">Apuntes ('+aps.length+')</div>';
   if(!aps.length){
-    h+='<div class="empty" style="padding:24px">'+I.vacio+'<p class="small">Esta referencia no tiene apuntes.</p></div>';
+    h+='<div class="empty" style="padding:24px">'+I.vacio+'<p class="small">Este trabajo no tiene apuntes.</p></div>';
   }else{
     h+='<div class="lst">';
     aps.forEach(a=>{
@@ -930,27 +942,27 @@ VISTAS['ref']=function(p){
     h+='</div>';
   }
   h+='<div style="padding:12px 14px;border-top:1px solid var(--line2)">'+
-     '<button class="btn block" data-act="ir" data-h="#/nuevo/apunte/'+r.id+'">'+I.mas+' Añadir apunte a esta referencia</button></div></div>';
+     '<button class="btn block" data-act="ir" data-h="#/nuevo/apunte/'+r.id+'">'+I.mas+' Añadir apunte a este trabajo</button></div></div>';
 
-  h+='<button class="btn danger block" data-act="borrar-ref" data-id="'+r.id+'">'+I.papel+' Eliminar referencia</button>';
+  h+='<button class="btn danger block" data-act="borrar-ref" data-id="'+r.id+'">'+I.papel+' Eliminar trabajo</button>';
 
   return { titulo:r.nombre,
-           sub: nomCli(r.clienteId)+(r.estado==='facturada'? ' · facturada el '+fFecha(r.fechaFactura):' · abierta'),
+           sub: nomCli(r.clienteId)+(r.estado==='facturada'? ' · facturado el '+fFecha(r.fechaFactura):' · abierto'),
            atras:true, html:h, nav:'referencias' };
 };
 ACT['toggle-fact']=async el=>{
   const r=getRef(el.dataset.id);
-  if(r.estado==='facturada'){ r.estado='abierta'; r.fechaFactura=null; toast('Referencia reabierta'); }
+  if(r.estado==='facturada'){ r.estado='abierta'; r.fechaFactura=null; toast('Trabajo reabierto'); }
   else{
     const t=totalesRef(r.id);
-    if(t.falta && !confirm('Hay materiales sin precio. ¿Marcar como facturada igualmente?')) return;
-    r.estado='facturada'; r.fechaFactura=hoyISO(); toast('Marcada como facturada');
+    if(t.falta && !confirm('Hay materiales sin precio. ¿Marcar como facturado igualmente?')) return;
+    r.estado='facturada'; r.fechaFactura=hoyISO(); toast('Marcado como facturado');
   }
   await guardar(); render();
 };
 ACT['renom-ref']=async el=>{
   const r=getRef(el.dataset.id);
-  const n=prompt('Nombre de la referencia:', r.nombre);
+  const n=prompt('Nombre del trabajo:', r.nombre);
   if(n===null) return;
   if(!n.trim()){ toast('No puede quedar vacío'); return; }
   r.nombre=n.trim(); await guardar(); render();
@@ -963,7 +975,7 @@ ACT['borrar-ref']=async el=>{
   if(!confirm(msg)) return;
   D.apuntes=D.apuntes.filter(a=>a.referenciaId!==r.id);
   D.referencias=D.referencias.filter(x=>x.id!==r.id);
-  await guardar(); toast('Referencia eliminada'); ir('#/referencias');
+  await guardar(); toast('Trabajo eliminado'); ir('#/referencias');
 };
 
 /* =========================================================
@@ -1025,6 +1037,7 @@ function lineasApunte(a){
   if(a.desplazamientos) out.push(['Desplazamientos', nn(a.desplazamientos), a.pDespl?nn(a.pDespl)+' €':'—', eur(a.desplazamientos*(a.pDespl||0))]);
   if(a.hOficial)  out.push(['Horas de oficial',  nn(a.hOficial)+' h',  a.tOficial?nn(a.tOficial)+' €/h':'—', eur(a.hOficial*(a.tOficial||0))]);
   if(a.hAyudante) out.push(['Horas de ayudante', nn(a.hAyudante)+' h', a.tAyudante?nn(a.tAyudante)+' €/h':'—', eur(a.hAyudante*(a.tAyudante||0))]);
+  if(a.hOfAy)     out.push(['Horas de oficial + ayudante', nn(a.hOfAy)+' h', a.tOfAy?nn(a.tOfAy)+' €/h':'—', eur(a.hOfAy*(a.tOfAy||0))]);
   (a.materiales||[]).forEach(m=>{
     out.push([m.d, nn(m.c), pn(m.p)?nn(m.p)+' €':'SIN PRECIO', eur(pn(m.c)*pn(m.p))]);
   });
@@ -1083,36 +1096,50 @@ function pdfMensual(ym,modo){
   const mes=fMesLargo(ym);
   const ctx=nuevoPDF('Informe mensual', mes.charAt(0).toUpperCase()+mes.slice(1));
   const gs=gruposPorRef(aps);
-  const body=[]; const G={hOf:0,hAy:0,despl:0,impMat:0,total:0};
+  /* la columna de oficial+ayudante solo sale si ese mes se ha usado */
+  const hayOfAy=gs.some(g=>totales(g.aps).hOfAy>0);
+  const body=[]; const G={hOf:0,hAy:0,hOfAy:0,despl:0,impMat:0,total:0};
   gs.forEach(g=>{
     const t=totales(g.aps);
-    G.hOf+=t.hOf; G.hAy+=t.hAy; G.despl+=t.despl; G.impMat+=t.impMat; G.total+=t.total;
-    body.push([nomCli(g.ref.clienteId), g.ref.nombre, nn(t.hOf), nn(t.hAy), nn(t.despl), eur(t.impMat), eur(t.total)]);
+    G.hOf+=t.hOf; G.hAy+=t.hAy; G.hOfAy+=t.hOfAy; G.despl+=t.despl; G.impMat+=t.impMat; G.total+=t.total;
+    const fila=[nomCli(g.ref.clienteId), g.ref.nombre, nn(t.hOf), nn(t.hAy)];
+    if(hayOfAy) fila.push(nn(t.hOfAy));
+    fila.push(nn(t.despl), eur(t.impMat), eur(t.total));
+    body.push(fila);
   });
-  seccion(ctx,'Resumen por referencia', gs.length+(gs.length===1?' referencia con trabajo este mes':' referencias con trabajo este mes'));
-  tabla(ctx,{
-    head:[['Cliente','Referencia','H. of.','H. ay.','Despl.','Materiales','Total']],
-    body:body,
-    foot:[[{content:'TOTAL',colSpan:2},nn(G.hOf),nn(G.hAy),nn(G.despl),eur(G.impMat),eur(G.total)]],
-    columnStyles:{2:{halign:'right',cellWidth:14},3:{halign:'right',cellWidth:14},4:{halign:'right',cellWidth:14},
-                  5:{halign:'right',cellWidth:24},6:{halign:'right',cellWidth:25}}
-  });
+  seccion(ctx,'Resumen por trabajo', gs.length+(gs.length===1?' trabajo con apuntes este mes':' trabajos con apuntes este mes'));
+  const cab=['Cliente','Trabajo','H. of.','H. ay.'].concat(hayOfAy?['H. of+ay']:[]).concat(['Despl.','Materiales','Total']);
+  const pie=[{content:'TOTAL',colSpan:2},nn(G.hOf),nn(G.hAy)].concat(hayOfAy?[nn(G.hOfAy)]:[]).concat([nn(G.despl),eur(G.impMat),eur(G.total)]);
+  const nc=cab.length, estilos={0:{cellWidth:27}};
+  if(hayOfAy){
+    estilos[2]={halign:'right',cellWidth:13};   /* H. of. */
+    estilos[3]={halign:'right',cellWidth:13};   /* H. ay. */
+    estilos[4]={halign:'right',cellWidth:17};   /* H. of+ay */
+    estilos[5]={halign:'right',cellWidth:14};   /* Despl. */
+  }else{
+    estilos[2]={halign:'right',cellWidth:14};
+    estilos[3]={halign:'right',cellWidth:14};
+    estilos[4]={halign:'right',cellWidth:14};
+  }
+  estilos[nc-2]={halign:'right',cellWidth:23};
+  estilos[nc-1]={halign:'right',cellWidth:24};
+  tabla(ctx,{ head:[cab], body:body, foot:[pie], columnStyles:estilos });
   gs.forEach(g=>{
     const t=totales(g.aps);
     seccion(ctx, nomCli(g.ref.clienteId)+' · '+g.ref.nombre,
-            (g.ref.estado==='facturada'?'Facturada':'Pendiente de facturar')+' · '+t.n+(t.n===1?' apunte':' apuntes')+' este mes');
+            (g.ref.estado==='facturada'?'Facturado':'Pendiente de facturar')+' · '+t.n+(t.n===1?' apunte':' apuntes')+' este mes');
     tablaDetalle(ctx,g.aps);
   });
   pieDePagina(ctx.doc);
   entrega(ctx.doc,'informe-'+ym+'.pdf',modo);
 }
 function pdfReferencia(rid,modo){
-  const r=getRef(rid); if(!r){ toast('Referencia no encontrada'); return; }
+  const r=getRef(rid); if(!r){ toast('Trabajo no encontrado'); return; }
   const aps=apsDe(rid);
-  if(!aps.length){ toast('Esta referencia no tiene apuntes'); return; }
+  if(!aps.length){ toast('Este trabajo no tiene apuntes'); return; }
   const t=totales(aps);
   const ctx=nuevoPDF(nomCli(r.clienteId)+' · '+r.nombre,
-    (r.estado==='facturada'?'Facturada el '+fFecha(r.fechaFactura):'Pendiente de facturar')+
+    (r.estado==='facturada'?'Facturado el '+fFecha(r.fechaFactura):'Pendiente de facturar')+
     ' · '+t.n+(t.n===1?' apunte':' apuntes')+' · desde '+fFecha(aps[aps.length-1].fecha)+' hasta '+fFecha(aps[0].fecha));
   seccion(ctx,'Resumen');
   tabla(ctx,{
@@ -1120,6 +1147,7 @@ function pdfReferencia(rid,modo){
     body:[
       ['Horas de oficial',  nn(t.hOf)+' h', eur(t.impOf)],
       ['Horas de ayudante', nn(t.hAy)+' h', eur(t.impAy)],
+      ['Horas de oficial + ayudante', nn(t.hOfAy)+' h', eur(t.impOfAy)],
       ['Desplazamientos',   nn(t.despl),    eur(t.impDespl)],
       ['Materiales',        t.nMat+(t.nMat===1?' línea':' líneas'), eur(t.impMat)]
     ],
@@ -1129,7 +1157,7 @@ function pdfReferencia(rid,modo){
   seccion(ctx,'Detalle por días');
   tablaDetalle(ctx,aps);
   pieDePagina(ctx.doc);
-  entrega(ctx.doc,'referencia-'+slug(nomCli(r.clienteId))+'-'+slug(r.nombre)+'.pdf',modo);
+  entrega(ctx.doc,'trabajo-'+slug(nomCli(r.clienteId))+'-'+slug(r.nombre)+'.pdf',modo);
 }
 function pdfSinFacturar(modo){
   const rs=D.referencias.filter(r=>r.estado!=='facturada')
@@ -1145,7 +1173,7 @@ function pdfSinFacturar(modo){
             nn(x.t.hOf), nn(x.t.hAy), nn(x.t.despl), eur(x.t.total)+(x.t.falta?' *':'')];
   });
   tabla(ctx,{
-    head:[['Cliente','Referencia','Ap.','Último','H. of.','H. ay.','Despl.','Total']],
+    head:[['Cliente','Trabajo','Ap.','Último','H. of.','H. ay.','Despl.','Total']],
     body:body,
     foot:[[{content:'TOTAL PENDIENTE',colSpan:7},eur(total)]],
     columnStyles:{2:{halign:'right',cellWidth:11},3:{cellWidth:22},4:{halign:'right',cellWidth:13},
@@ -1153,7 +1181,7 @@ function pdfSinFacturar(modo){
   });
   if(falta){
     ctx.doc.setFont('helvetica','italic'); ctx.doc.setFontSize(8.5); ctx.doc.setTextColor(198,40,40);
-    ctx.doc.text('* Esta referencia tiene materiales sin precio: el total está incompleto.',14,ctx.y);
+    ctx.doc.text('* Este trabajo tiene materiales sin precio: el total está incompleto.',14,ctx.y);
     ctx.doc.setTextColor(0);
   }
   pieDePagina(ctx.doc);
@@ -1191,7 +1219,7 @@ VISTAS['informes']=function(){
        '</div>';
   }
   h+='<div class="hr"></div><div class="small'+(aps.length?'':' muted')+'">'+
-     (aps.length? '<b>'+aps.length+(aps.length===1?' apunte':' apuntes')+'</b> · '+gs.length+(gs.length===1?' referencia':' referencias')+' · '+eur(t.total)
+     (aps.length? '<b>'+aps.length+(aps.length===1?' apunte':' apuntes')+'</b> · '+gs.length+(gs.length===1?' trabajo':' trabajos')+' · '+eur(t.total)
                 : 'No hay apuntes en '+fMesLargo(mesSel))+'</div>'+
      '<div class="btnrow" style="margin-top:12px">'+
      '<button class="btn primary" data-act="pdf-mes" data-modo="descargar"'+(aps.length?'':' disabled')+'>'+I.pdf+' PDF</button>'+
@@ -1199,9 +1227,9 @@ VISTAS['informes']=function(){
      '</div></div></div>';
 
   /* --- por referencia --- */
-  h+='<div class="card"><div class="card-h">Informe de una referencia</div><div style="padding:14px">';
+  h+='<div class="card"><div class="card-h">Informe de un trabajo</div><div style="padding:14px">';
   if(!conAp.length){
-    h+='<div class="small muted">Todavía no hay referencias con apuntes.</div>';
+    h+='<div class="small muted">Todavía no hay trabajos con apuntes.</div>';
   }else{
     const porCli={};
     conAp.forEach(r=>{ (porCli[r.clienteId]=porCli[r.clienteId]||[]).push(r); });
@@ -1210,11 +1238,11 @@ VISTAS['informes']=function(){
       h+='<optgroup label="'+esc(nomCli(cid))+'">';
       porCli[cid].sort((a,b)=>a.nombre.localeCompare(b.nombre,'es')).forEach(r=>{
         h+='<option value="'+r.id+'"'+(r.id===refSel?' selected':'')+'>'+esc(r.nombre)+
-           (r.estado==='facturada'?' (facturada)':'')+' — '+eur(totalesRef(r.id).total)+'</option>';
+           (r.estado==='facturada'?' (facturado)':'')+' — '+eur(totalesRef(r.id).total)+'</option>';
       });
       h+='</optgroup>';
     });
-    h+='</select><div class="hint">Útil cuando una referencia dura varios meses y se factura al acabar.</div>'+
+    h+='</select><div class="hint">Útil cuando un trabajo dura varios meses y se factura al acabar.</div>'+
        '<div class="btnrow" style="margin-top:12px">'+
        '<button class="btn primary" data-act="pdf-refsel" data-modo="descargar">'+I.pdf+' PDF</button>'+
        '<button class="btn" data-act="pdf-refsel" data-modo="compartir">'+I.comp+' Compartir</button></div>';
@@ -1224,14 +1252,14 @@ VISTAS['informes']=function(){
   /* --- pendiente de facturar --- */
   h+='<div class="card"><div class="card-h">Pendiente de facturar</div><div style="padding:14px">'+
      '<div class="small'+(pend.length?'':' muted')+'">'+
-     (pend.length? '<b>'+pend.length+(pend.length===1?' referencia':' referencias')+'</b> sin facturar · '+eur(totPend)
+     (pend.length? '<b>'+pend.length+(pend.length===1?' trabajo':' trabajos')+'</b> sin facturar · '+eur(totPend)
                  : 'No hay nada pendiente.')+'</div>'+
      '<div class="btnrow" style="margin-top:12px">'+
      '<button class="btn primary" data-act="pdf-pend" data-modo="descargar"'+(pend.length?'':' disabled')+'>'+I.pdf+' PDF</button>'+
      '<button class="btn" data-act="pdf-pend" data-modo="compartir"'+(pend.length?'':' disabled')+'>'+I.comp+' Compartir</button>'+
      '</div></div></div>';
 
-  return {titulo:'Informes', sub:'Mensual, por referencia y pendientes', html:h, nav:'informes'};
+  return {titulo:'Informes', sub:'Mensual, por trabajo y pendientes', html:h, nav:'informes'};
 };
 IN['mes']=el=>{ if(el.value){ mesSel=el.value; render(); } };
 ACT['mes']=el=>{ mesSel=el.dataset.v; render(); };
@@ -1265,19 +1293,27 @@ VISTAS['ajustes']=function(){
      '<div>Estas tarifas se copian en cada apunte <b>nuevo</b>. Los apuntes ya guardados conservan la tarifa que tenían, así que si subes precios no se te recalcula el trabajo viejo.</div></div>'+
      campoTarifa('Hora de oficial (€/h)','tOficial',a.tOficial)+
      campoTarifa('Hora de ayudante (€/h)','tAyudante',a.tAyudante)+
+     campoTarifa('Hora de oficial + ayudante (€/h)','tOfAy',a.tOfAy,'Para las horas en que vais los dos a la vez.')+
      campoTarifa('Desplazamiento (€ cada uno)','pDespl',a.pDespl,'Déjalo vacío si no lo cobras aparte.')+
      '</div></div>';
 
+  const compartible=puedeCompartirFicheros();
   h+='<div class="card"><div class="card-h">Copia de seguridad</div><div style="padding:14px">'+
      (D.meta.ultimaCopia
         ? '<div class="small muted mb">Última copia: '+fFecha(D.meta.ultimaCopia)+(dias>0?' (hace '+dias+(dias===1?' día':' días')+')':' (hoy)')+'</div>'
-        : '<div class="note w" style="margin-bottom:12px">'+I.aviso+'<div>Todavía no has hecho ninguna copia.</div></div>')+
-     '<div class="small muted mb">Los datos están sólo en este móvil. Guarda el fichero en Drive o mándatelo por correo.</div>'+
-     '<div class="btnrow"><button class="btn primary" data-act="copia" data-modo="descargar">'+I.pdf+' Guardar copia</button>'+
-     '<button class="btn" data-act="copia" data-modo="compartir">'+I.comp+' Enviar copia</button></div>'+
-     '<div class="btnrow" style="margin-top:10px">'+
-     '<button class="btn" data-act="csv">Exportar a Excel (CSV)</button>'+
-     '<button class="btn danger" data-act="restaurar">Restaurar copia</button></div>'+
+        : '<div class="note w" style="margin-bottom:12px">'+I.aviso+'<div>Todavía no has hecho ninguna copia. Los datos están sólo en este móvil.</div></div>')+
+     (compartible
+       ? '<div class="small muted mb">Abre el menú de compartir del móvil: eliges <b>Drive</b>, Gmail o WhatsApp y se va directo, sin pasar por el gestor de ficheros.</div>'+
+         '<button class="btn primary block" data-act="copia" data-modo="compartir">'+I.comp+' Enviar copia</button>'+
+         '<div class="btnrow" style="margin-top:10px">'+
+         '<button class="btn" data-act="copia" data-modo="descargar">Descargar</button>'+
+         '<button class="btn danger" data-act="restaurar">Restaurar</button></div>'
+       : '<div class="note w" style="margin-bottom:12px">'+I.aviso+'<div>Este navegador no deja compartir ficheros. Descárgala y muévela tú.</div></div>'+
+         '<div class="btnrow">'+
+         '<button class="btn primary" data-act="copia" data-modo="descargar">Descargar copia</button>'+
+         '<button class="btn danger" data-act="restaurar">Restaurar</button></div>')+
+     '<div class="hr"></div>'+
+     '<button class="btn block" data-act="csv">Exportar a Excel (CSV)</button>'+
      '</div></div>';
 
   h+='<div class="card"><div class="card-h">Datos para la cabecera de los informes</div><div style="padding:14px 14px 2px">'+
@@ -1298,7 +1334,7 @@ VISTAS['ajustes']=function(){
      (D.clientes.length===1?' cliente':' clientes')+' · renombrar o borrar</div></div><div class="chev">'+I.chev+'</div></button></div>';
 
   h+='<div class="card pad small muted"><b>Diario de trabajos</b><br>'+
-     D.apuntes.length+' apuntes · '+D.referencias.length+' referencias · '+
+     D.apuntes.length+' apuntes · '+D.referencias.length+' trabajos · '+
      D.clientes.length+' clientes · '+D.catalogo.length+' materiales en el catálogo<br>'+
      'Todo se guarda en este móvil, sin servidor.</div>';
 
@@ -1315,27 +1351,44 @@ function aplicarTema(){
 }
 
 /* ---------- copia de seguridad ---------- */
-async function entregaFichero(texto,nombre,tipo,modo){
-  const blob=new Blob([texto],{type:tipo});
-  if(modo==='compartir'){
-    try{
-      const f=new File([blob],nombre,{type:tipo});
-      if(navigator.canShare && navigator.canShare({files:[f]})){
-        await navigator.share({files:[f],title:nombre}); return;
-      }
-      toast('Este móvil no puede compartir ficheros; se descarga');
-    }catch(e){ if(e && e.name==='AbortError') return; }
-  }
+function descargar(blob,nombre){
   const url=URL.createObjectURL(blob);
   const a=document.createElement('a'); a.href=url; a.download=nombre;
   document.body.appendChild(a); a.click(); a.remove();
   setTimeout(()=>URL.revokeObjectURL(url),5000);
-  toast('Guardado en Descargas');
+}
+/* OJO: Chrome en Android solo deja compartir ficheros de ciertos tipos, y .json NO
+   está permitido. Por eso la copia se llama .txt aunque por dentro sea JSON. */
+function puedeCompartirFicheros(){
+  try{
+    if(!navigator.canShare) return false;
+    return navigator.canShare({files:[new File(['x'],'x.txt',{type:'text/plain'})]});
+  }catch(e){ return false; }
+}
+async function compartirFichero(texto,nombre,tipo){
+  let f;
+  try{ f=new File([texto],nombre,{type:tipo}); }catch(e){ return 'no-soportado'; }
+  if(!(navigator.canShare && navigator.canShare({files:[f]}))) return 'no-soportado';
+  try{ await navigator.share({files:[f], title:nombre}); return 'ok'; }
+  catch(e){ return (e && e.name==='AbortError') ? 'cancelado' : 'error'; }
 }
 ACT['copia']=async el=>{
-  D.meta.ultimaCopia=hoyISO(); await guardar();
-  await entregaFichero(JSON.stringify(D), 'diario-copia-'+hoyISO()+'.json', 'application/json', el.dataset.modo);
-  render();
+  const texto=JSON.stringify(D);
+  const nombre='diario-copia-'+hoyISO()+'.txt';
+  if(el.dataset.modo==='compartir'){
+    /* compartir PRIMERO: si antes esperamos a guardar, Android ya no considera
+       que la acción venga de un toque tuyo y se niega a abrir el menú */
+    const r=await compartirFichero(texto,nombre,'text/plain');
+    if(r==='cancelado') return;
+    if(r!=='ok'){
+      toast('No se pudo compartir; se descarga');
+      descargar(new Blob([texto],{type:'text/plain'}),nombre);
+    }
+  }else{
+    descargar(new Blob([texto],{type:'text/plain'}),nombre);
+    toast('Copia descargada');
+  }
+  D.meta.ultimaCopia=hoyISO(); await guardar(); render();
 };
 ACT['csv']=async()=>{
   const sep=';';
@@ -1349,11 +1402,12 @@ ACT['csv']=async()=>{
     });
   });
   if(fil.length===1){ toast('No hay datos que exportar'); return; }
-  await entregaFichero('﻿'+fil.join('\r\n'),'diario-'+hoyISO()+'.csv','text/csv','descargar');
+  descargar(new Blob(['\uFEFF'+fil.join('\r\n')],{type:'text/csv'}),'diario-'+hoyISO()+'.csv');
+  toast('CSV descargado');
 };
 ACT['restaurar']=()=>{
   const inp=document.createElement('input');
-  inp.type='file'; inp.accept='.json,application/json';
+  inp.type='file'; inp.accept='.txt,.json,text/plain,application/json';
   inp.onchange=async()=>{
     const f=inp.files && inp.files[0]; if(!f) return;
     try{
@@ -1361,7 +1415,7 @@ ACT['restaurar']=()=>{
       const d=JSON.parse(txt);
       if(!d || !d.v || !Array.isArray(d.apuntes)) throw new Error('El fichero no es una copia del diario');
       if(!confirm('Vas a sustituir TODOS los datos de este móvil por los de la copia:\n\n'+
-                  (d.apuntes.length)+' apuntes, '+(d.referencias||[]).length+' referencias.\n\n¿Seguir?')) return;
+                  (d.apuntes.length)+' apuntes, '+(d.referencias||[]).length+' trabajos.\n\n¿Seguir?')) return;
       D=migrar(d); await guardar(); pintaDatalist(); aplicarTema();
       toast('Copia restaurada'); ir('#/'); render();
     }catch(e){ console.error(e); alert('No se ha podido restaurar: '+e.message); }
@@ -1382,14 +1436,14 @@ VISTAS['clientes']=function(){
       const rs=refsDe(c.id), ab=rs.filter(r=>r.estado!=='facturada').length;
       h+='<div class="li" style="cursor:default">'+
          '<div class="gro"><div class="t">'+esc(c.nombre)+'</div><div class="s">'+
-         rs.length+(rs.length===1?' referencia':' referencias')+(ab?' · '+ab+' abierta'+(ab===1?'':'s'):'')+'</div></div>'+
+         rs.length+(rs.length===1?' trabajo':' trabajos')+(ab?' · '+ab+' abierto'+(ab===1?'':'s'):'')+'</div></div>'+
          '<button class="delb" style="color:var(--text)" data-act="renom-cli" data-id="'+c.id+'" aria-label="Renombrar">'+I.lapiz+'</button>'+
          '<button class="delb" data-act="borrar-cli" data-id="'+c.id+'" aria-label="Borrar">'+I.papel+'</button>'+
          '</div>';
     });
     h+='</div></div>';
   }
-  h+='<div class="card pad small muted">Un cliente sólo se puede borrar si no tiene referencias.</div>';
+  h+='<div class="card pad small muted">Un cliente sólo se puede borrar si no tiene trabajos.</div>';
   return {titulo:'Clientes', atras:true, html:h, nav:'ajustes'};
 };
 ACT['renom-cli']=async el=>{
@@ -1401,7 +1455,7 @@ ACT['renom-cli']=async el=>{
 };
 ACT['borrar-cli']=async el=>{
   const c=getCli(el.dataset.id);
-  if(refsDe(c.id).length){ toast('Tiene referencias; bórralas primero'); return; }
+  if(refsDe(c.id).length){ toast('Tiene trabajos; bórralos primero'); return; }
   if(!confirm('¿Eliminar el cliente "'+c.nombre+'"?')) return;
   D.clientes=D.clientes.filter(x=>x.id!==c.id);
   await guardar(); toast('Cliente eliminado'); render();
