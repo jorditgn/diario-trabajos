@@ -259,6 +259,7 @@ dialog.sheet h3{margin-bottom:12px;font-size:17px}
    DIARIO DE TRABAJOS — datos locales en el móvil
    ========================================================= */
 
+const VERSION='3';   /* se ve en Ajustes, para saber qué versión tiene el móvil */
 const DBN='diario-trabajos', STORE='kv', KEY='datos', LSKEY='diario-copia-seguridad';
 let D=null;            /* todos los datos, en memoria */
 let borrador=null;     /* apunte que se está editando */
@@ -1333,7 +1334,7 @@ VISTAS['ajustes']=function(){
      '<div class="gro"><div class="t">Clientes</div><div class="s">'+D.clientes.length+
      (D.clientes.length===1?' cliente':' clientes')+' · renombrar o borrar</div></div><div class="chev">'+I.chev+'</div></button></div>';
 
-  h+='<div class="card pad small muted"><b>Diario de trabajos</b><br>'+
+  h+='<div class="card pad small muted"><b>Diario de trabajos</b> · versión '+VERSION+'<br>'+
      D.apuntes.length+' apuntes · '+D.referencias.length+' trabajos · '+
      D.clientes.length+' clientes · '+D.catalogo.length+' materiales en el catálogo<br>'+
      'Todo se guarda en este móvil, sin servidor.</div>';
@@ -1479,7 +1480,25 @@ ACT['borrar-cli']=async el=>{
     }
   }catch(e){}
   if('serviceWorker' in navigator){
-    window.addEventListener('load',()=>navigator.serviceWorker.register('./sw.js').catch(()=>{}));
+    const yaControlada = !!navigator.serviceWorker.controller;
+    let recargando=false;
+    /* cuando entra una versión nueva, recargar sola; si estás a media faena
+       en un apunte, esperar y avisar en vez de tirarte lo escrito */
+    navigator.serviceWorker.addEventListener('controllerchange',()=>{
+      if(!yaControlada || recargando) return;
+      if(borrador){ toast('Hay una versión nueva; se pondrá al salir de aquí'); return; }
+      recargando=true; location.reload();
+    });
+    const registrar=()=>{
+      navigator.serviceWorker.register('./sw.js').then(reg=>{
+        reg.update().catch(()=>{});
+        setInterval(()=>reg.update().catch(()=>{}), 3600000);
+      }).catch(e=>console.warn('No se pudo registrar el service worker',e));
+    };
+    /* si la página ya terminó de cargar (el arranque es asíncrono y el evento
+       'load' puede haber pasado ya), registrar ahora mismo */
+    if(document.readyState==='complete') registrar();
+    else window.addEventListener('load',registrar);
   }
 })();
 </script>
