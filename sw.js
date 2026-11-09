@@ -1,7 +1,10 @@
 /* Service worker: deja la aplicación funcionando sin cobertura,
    pero sin quedarse pegada a una versión vieja. */
-const VERSION  = 'v3';
-const CACHE    = 'diario-' + VERSION;
+/* Esta app comparte dominio con otras (Control de horas), y las cachés son del
+   dominio entero: sólo tocamos las que empiezan por nuestro prefijo. */
+const PREFIJO  = 'diario-';
+const VERSION  = 'v4';
+const CACHE    = PREFIJO + VERSION;
 const FICHEROS = [
   './',
   './index.html',
@@ -25,7 +28,7 @@ self.addEventListener('install', e => {
 self.addEventListener('activate', e => {
   e.waitUntil((async () => {
     const ks = await caches.keys();
-    await Promise.all(ks.filter(k => k !== CACHE).map(k => caches.delete(k)));
+    await Promise.all(ks.filter(k => k.startsWith(PREFIJO) && k !== CACHE).map(k => caches.delete(k)));
     await self.clients.claim();
   })());
 });
@@ -54,7 +57,8 @@ self.addEventListener('fetch', e => {
         }
         return res;
       } catch (err) {
-        const hit = await caches.match('./index.html');
+        const c = await caches.open(CACHE);
+        const hit = await c.match('./index.html');
         if (hit) return hit;
         throw err;
       }
@@ -64,7 +68,8 @@ self.addEventListener('fetch', e => {
 
   /* Lo demás (librerías, iconos): la copia guardada, que no cambia casi nunca. */
   e.respondWith((async () => {
-    const hit = await caches.match(req);
+    const propia = await caches.open(CACHE);
+    const hit = await propia.match(req);
     if (hit) return hit;
     const res = await fetch(req);
     if (res && res.ok && new URL(req.url).origin === location.origin) {
